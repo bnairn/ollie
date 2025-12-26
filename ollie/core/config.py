@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     openrouteservice_api_key: str = ""
     spoonacular_api_key: str = ""
     anthropic_api_key: str = ""
+    opensky_username: str = ""
+    opensky_password: str = ""
 
     # Location defaults
     default_location: str = "Edgewood, WA"

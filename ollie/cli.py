@@ -21,6 +21,7 @@ from .skills import (
     SonosSkill,
     ClaudeSkill,
     TimeSkill,
+    AircraftSkill,
 )
 
 
@@ -60,6 +61,7 @@ async def async_main() -> None:
     orchestrator.register(SonosSkill())
     orchestrator.register(ClaudeSkill())
     orchestrator.register(TimeSkill())
+    orchestrator.register(AircraftSkill())
 
     console.print()
 
