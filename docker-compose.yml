@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  ollie:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount source for live development
+      - ./src:/app/src:ro
+      # Mount models directory
+      - ./models:/app/models:ro
+      # Mount .env file
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    stdin_open: true   # Keep stdin open for interactive mode
+    tty: true          # Allocate a pseudo-TTY
+
+  # Future services can be added here:
+  # whisper:
+  #   image: whisper-server
+  #   ...
+  # piper:
+  #   image: piper-tts
+  #   ...
