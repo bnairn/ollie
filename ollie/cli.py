@@ -9,6 +9,8 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from .core import Orchestrator
+from .core.config import get_settings
+from .voice.tts import TTS
 from .skills import (
     TimerSkill,
     JokesSkill,
@@ -35,6 +37,17 @@ def timer_complete_handler(timer) -> None:
 async def async_main() -> None:
     """Main async entry point."""
     console = Console()
+    settings = get_settings()
+
+    # Initialize TTS if enabled
+    tts = None
+    if settings.tts_enabled:
+        tts = TTS()
+        if tts.piper_available:
+            console.print("[dim]TTS enabled (Piper)[/dim]")
+        else:
+            console.print("[dim]TTS unavailable - install piper for voice output[/dim]")
+            tts = None
 
     # Print welcome banner
     console.print(
@@ -95,6 +108,12 @@ async def async_main() -> None:
                 console.print(f"[bold blue]OLLIE[/bold blue]: {result.response}")
             else:
                 console.print(f"[bold red]OLLIE[/bold red]: {result.response}")
+
+            # Speak the response
+            if tts:
+                # Use speak text if available (optimized for TTS), otherwise use response
+                speak_text = result.speak if result.speak else result.response
+                await tts.speak(speak_text)
 
             console.print()
 

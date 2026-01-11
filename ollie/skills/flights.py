@@ -28,6 +28,9 @@ class FlightsSkill(Skill):
         r"(?:when\s+)?(?:does|will|is)\s+(?:flight\s+)?([A-Z]{2,3}\s*\d{1,4})\s+(?:arrive|land|depart|take off)",
         r"(?:what\s+time\s+)?(?:does|will|is)\s+([A-Z]{2,3}\s*\d{1,4})\s+(?:scheduled|arriving|landing|departing)",
         r"([A-Z]{2,3}\s*\d{1,4})\s+(?:arrival|departure|status|eta)",
+        r"where\s+is\s+(?:flight\s+)?([A-Z]{2,3}\s*\d{1,4})",
+        r"(?:where\s+is\s+)?([A-Z]{2,3}\s*\d{1,4})\s+(?:going|headed|flying)",
+        r"track\s+(?:flight\s+)?([A-Z]{2,3}\s*\d{1,4})",
     ]
 
     # Common airline codes for normalization

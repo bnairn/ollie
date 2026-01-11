@@ -100,6 +100,11 @@ class AircraftSkill(Skill):
             auth = (self.settings.opensky_username, self.settings.opensky_password)
 
         response = await self.client.get(url, params=params, auth=auth)
+
+        # If auth fails, retry without auth (anonymous has lower rate limits but works)
+        if response.status_code == 401 and auth:
+            response = await self.client.get(url, params=params)
+
         response.raise_for_status()
         data = response.json()
 

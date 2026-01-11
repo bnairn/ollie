@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # For text-mode prototype, we can use a mock LLM
     use_mock_llm: bool = True
 
+    # Voice Settings
+    piper_model_path: Path = Path("./models/en_US-lessac-medium.onnx")
+    whisper_model_size: str = "base"
+    wake_word: str = "ollie"
+    wake_word_threshold: float = 0.5
+    tts_enabled: bool = True
+
 
 # Global settings instance
 _settings: Settings | None = None
