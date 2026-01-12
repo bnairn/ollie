@@ -23,7 +23,7 @@ class AircraftSkill(Skill):
     ]
 
     MATCH_PATTERNS = [
-        r"(?:what|which)\s+(?:plane|aircraft|airplane)s?\s+(?:are\s+)?(?:flying\s+)?(?:over|above|nearby)",
+        r"(?:what|which)\s+(?:plane|aircraft|airplane)s?\s+(?:is|are)\s+(?:flying\s+)?(?:over|above|nearby|overhead)",
         r"(?:tell\s+me\s+about|show\s+me)\s+(?:the\s+)?(?:plane|aircraft|airplane)s?\s+(?:over|above|nearby|overhead)",
         r"(?:what'?s?\s+)?(?:that\s+)?(?:plane|aircraft|airplane)\s+(?:over|above)\s+(?:me|my\s+house|us|here)",
         r"(?:plane|aircraft|airplane)s?\s+(?:flying\s+)?(?:over|above|nearby|overhead)",

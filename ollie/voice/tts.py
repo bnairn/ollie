@@ -19,7 +19,30 @@ class TTS:
 
     def _check_piper(self) -> None:
         """Check if piper is available (as Python module or binary)."""
-        # First check for Python module
+        # Check common locations for piper binary
+        piper_paths = [
+            "piper",  # In PATH
+            str(Path.home() / ".local" / "bin" / "piper"),  # User local install
+            str(Path.home() / "ollie" / "venv" / "bin" / "piper"),  # Old venv install
+            "/usr/local/bin/piper",
+            "/usr/bin/piper",
+        ]
+
+        for piper_path in piper_paths:
+            try:
+                result = subprocess.run(
+                    [piper_path, "--help"],
+                    capture_output=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    self.piper_available = True
+                    self.piper_cmd = [piper_path]
+                    return
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+
+        # Try Python module as fallback
         try:
             result = subprocess.run(
                 ["python", "-m", "piper", "--help"],
@@ -29,20 +52,6 @@ class TTS:
             if result.returncode == 0:
                 self.piper_available = True
                 self.piper_cmd = ["python", "-m", "piper"]
-                return
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # Fall back to binary
-        try:
-            result = subprocess.run(
-                ["piper", "--help"],
-                capture_output=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                self.piper_available = True
-                self.piper_cmd = ["piper"]
                 return
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass

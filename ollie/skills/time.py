@@ -212,6 +212,11 @@ class TimeSkill(Skill):
         # Try direct location lookup
         tz_name = self.LOCATION_TIMEZONES.get(location_lower)
 
+        # Try parsing "city, country" format - check just the city part
+        if not tz_name and "," in location_lower:
+            city_part = location_lower.split(",")[0].strip()
+            tz_name = self.LOCATION_TIMEZONES.get(city_part)
+
         # Try US timezone abbreviations
         if not tz_name:
             tz_name = self.US_TIMEZONES.get(location_lower)

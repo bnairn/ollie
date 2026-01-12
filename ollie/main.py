@@ -15,7 +15,7 @@ from .core import Orchestrator
 from .core.config import get_settings
 from .voice.tts import TTS
 from .voice.stt import STT
-from .voice.wakeword import WakeWordDetector
+from .voice.wakeword_oww import OpenWakeWordDetector
 from .voice.audio import AudioCapture
 from .skills import (
     TimerSkill,
@@ -30,6 +30,7 @@ from .skills import (
     ClaudeSkill,
     TimeSkill,
     AircraftSkill,
+    SportsSkill,
 )
 
 
@@ -42,7 +43,7 @@ class OllieAssistant:
         self.orchestrator = Orchestrator()
         self.tts: Optional[TTS] = None
         self.stt: Optional[STT] = None
-        self.wakeword: Optional[WakeWordDetector] = None
+        self.wakeword: Optional[OpenWakeWordDetector] = None
         self.audio: Optional[AudioCapture] = None
         self._running = False
 
@@ -67,6 +68,7 @@ class OllieAssistant:
         self.orchestrator.register(ClaudeSkill())
         self.orchestrator.register(TimeSkill())
         self.orchestrator.register(AircraftSkill())
+        self.orchestrator.register(SportsSkill())
 
         # Initialize TTS
         if self.settings.tts_enabled:
@@ -86,26 +88,29 @@ class OllieAssistant:
         else:
             self.console.print("[yellow]  STT: Whisper not available[/yellow]")
 
-        # Initialize wake word detector
-        self.wakeword = WakeWordDetector(
-            wake_word=self.settings.wake_word,
-            threshold=self.settings.wake_word_threshold,
+        # Initialize wake word detector (openWakeWord - much faster than Whisper)
+        # Use custom "Hey Ollie" model if available, otherwise fall back to hey_jarvis
+        import os
+        custom_model = os.path.expanduser("~/ollie/models/hey_ollie.onnx")
+        use_custom = os.path.exists(custom_model)
+        self.wakeword = OpenWakeWordDetector(
+            wake_word="hey_jarvis",  # Fallback to pre-trained model
+            threshold=0.5 if not use_custom else 0.3,
             on_wake=self._on_wake,
+            audio_device="hw:3,0",  # XVF3800
+            custom_model_path=custom_model if use_custom else None,
         )
-        self.console.print("[dim]  Wake word: Loading model...[/dim]")
+        self.console.print("[dim]  Wake word: Loading openWakeWord...[/dim]")
         await self.wakeword.load()
+        await self.wakeword.start()
+        self._wake_phrase = "Hey Ollie" if use_custom else "Hey Jarvis"
         if self.wakeword.model:
-            self.console.print(f"[dim]  Wake word: Listening for '{self.settings.wake_word}'[/dim]")
+            self.console.print(f"[dim]  Wake word: Say '{self._wake_phrase}' to wake[/dim]")
         else:
             self.console.print("[yellow]  Wake word: Not available (press Enter to speak)[/yellow]")
 
-        # Initialize audio capture
-        self.audio = AudioCapture(sample_rate=16000, channels=1)
-        await self.audio.start()
-        if self.audio.is_running:
-            self.console.print("[dim]  Audio: Microphone ready[/dim]")
-        else:
-            self.console.print("[yellow]  Audio: Microphone not available[/yellow]")
+        # Audio capture is handled by the wakeword detector's arecord stream
+        # No separate AudioCapture needed
 
     def _on_timer(self, timer) -> None:
         """Handle timer completion."""
@@ -119,37 +124,69 @@ class OllieAssistant:
         self.console.print("[bold green]Listening...[/bold green]")
 
     async def speak(self, text: str) -> None:
-        """Speak text using TTS."""
+        """Speak text using TTS, pausing wake word detection to avoid echo."""
         if self.tts:
+            # Pause wake word detection during speech to avoid picking up our own voice
+            if self.wakeword:
+                self.wakeword.pause()
+
             await self.tts.speak(text)
 
-    async def listen(self, timeout: float = 5.0) -> str:
-        """Listen for speech and transcribe."""
-        if not self.audio or not self.stt:
+            # Wait for audio to fully finish playing + decay
+            await asyncio.sleep(0.5)
+
+            # Flush all buffered audio captured during speech (our own voice)
+            if self.wakeword:
+                self.wakeword.flush_audio_buffer()
+                self.wakeword.resume()
+
+    async def listen(self, timeout: float = 5.0, clear_buffer: bool = False) -> str:
+        """Listen for speech and transcribe.
+
+        Uses the wakeword detector's arecord stream for audio capture.
+        """
+        if not self.stt or not self.wakeword:
             return ""
 
-        self.audio.clear()
         start_time = time.time()
         audio_chunks = []
         silence_start = None
-        silence_threshold = 1.0  # seconds of silence to stop
+        speech_detected = False
+        silence_threshold = 1.5  # seconds of silence to stop (after speech detected)
+        min_speech_chunks = 30  # ~2 seconds of audio before silence can stop
+        max_volume = 0  # Debug: track max volume seen
+
+        # Pause wake word detection while listening
+        self.wakeword.pause()
 
         while time.time() - start_time < timeout:
-            chunk = self.audio.get_audio(timeout=0.1)
+            # Read audio from the wakeword detector's arecord stream
+            chunk = self.wakeword._read_audio_chunk()
             if chunk is not None:
                 audio_chunks.append(chunk)
 
-                # Simple voice activity detection
+                # Voice activity detection - int16 range is -32768 to 32767
                 volume = np.abs(chunk).mean()
-                if volume < 500:  # Silence threshold
+                max_volume = max(max_volume, volume)
+
+                # XVF3800 beamformed output: typical speech mean ~80-100, silence ~2-5
+                if volume > 30:  # Speech detected
+                    speech_detected = True
+                    silence_start = None
+                elif volume < 10:  # Silence
                     if silence_start is None:
                         silence_start = time.time()
-                    elif time.time() - silence_start > silence_threshold and len(audio_chunks) > 10:
-                        break
-                else:
-                    silence_start = None
+                    # Stop after we've heard speech and have enough audio
+                    elif speech_detected and len(audio_chunks) > min_speech_chunks:
+                        if time.time() - silence_start > silence_threshold:
+                            break
 
             await asyncio.sleep(0.01)
+
+        # Resume wake word detection
+        self.wakeword.resume()
+
+        print(f"[Listen] max_volume={max_volume:.0f}, chunks={len(audio_chunks)}, speech={speech_detected}")
 
         if not audio_chunks:
             return ""
@@ -188,7 +225,7 @@ class OllieAssistant:
         self.console.print(
             Panel.fit(
                 "[bold blue]OLLIE[/bold blue] - Offline Local Language Intelligence\n"
-                f"[dim]Say '{self.settings.wake_word}' to wake, or press Ctrl+C to exit[/dim]",
+                f"[dim]Say '{self._wake_phrase}' to wake, or press Ctrl+C to exit[/dim]",
                 border_style="blue",
             )
         )
@@ -198,23 +235,28 @@ class OllieAssistant:
         await self.speak("Hello! I'm OLLIE, your voice assistant. How can I help?")
 
         self._running = True
+        self._wake_detected = False
 
         while self._running:
             try:
-                # Check for wake word
-                if self.wakeword and self.wakeword.model and self.audio:
-                    chunk = self.audio.get_audio(timeout=0.1)
-                    if chunk is not None:
-                        if self.wakeword.process_audio(chunk.flatten()):
-                            # Wake word detected
-                            await self.speak("Yes?")
+                # Check for wake word using openWakeWord
+                if self.wakeword and self.wakeword.model:
+                    # Read audio chunk from arecord
+                    chunk = self.wakeword._read_audio_chunk()
+                    if chunk is not None and self._running:
+                        # Process for wake word detection
+                        detected = self.wakeword.process_audio(chunk)
+                        if detected and self._running:
+                            # Wake word detected - listen for command
+                            self.console.print("[bold green]Listening...[/bold green]")
                             query = await self.listen(timeout=10.0)
-                            if query:
+                            if query and self._running:
                                 await self.process_query(query)
-                            self.wakeword.reset()
                 else:
                     # Fallback: wait for keyboard input
                     await asyncio.sleep(0.1)
+
+                await asyncio.sleep(0.01)  # Prevent tight loop
 
             except KeyboardInterrupt:
                 break
@@ -228,20 +270,26 @@ class OllieAssistant:
         """Clean shutdown."""
         self._running = False
         self.console.print("\n[dim]Goodbye![/dim]")
-        if self.audio:
-            await self.audio.stop()
+        if self.wakeword:
+            await self.wakeword.stop()
 
 
 async def async_main() -> None:
     """Async entry point."""
     assistant = OllieAssistant()
 
-    # Handle signals
+    # Handle signals - set flag directly for immediate response
+    def handle_signal():
+        assistant._running = False
+
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: asyncio.create_task(assistant.shutdown()))
+        loop.add_signal_handler(sig, handle_signal)
 
-    await assistant.run()
+    try:
+        await assistant.run()
+    finally:
+        await assistant.shutdown()
 
 
 def main() -> None:

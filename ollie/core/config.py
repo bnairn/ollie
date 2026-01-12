@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     wake_word: str = "ollie"
     wake_word_threshold: float = 0.5
     tts_enabled: bool = True
+    audio_input_device: str = "respeaker"  # Search for device containing this string
 
 
 # Global settings instance

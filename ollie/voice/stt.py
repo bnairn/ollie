@@ -65,11 +65,14 @@ class STT:
             loop = asyncio.get_event_loop()
 
             def _transcribe():
+                # Optimized for speed on Raspberry Pi:
+                # - beam_size=1 for fastest decoding
+                # - Disable VAD filter - XVF3800 beamformed output is already processed
                 segments, info = self.model.transcribe(
                     audio,
-                    beam_size=5,
+                    beam_size=1,  # Faster than beam_size=5
                     language="en",
-                    vad_filter=True,
+                    vad_filter=False,
                 )
                 return " ".join(segment.text.strip() for segment in segments)
 
@@ -92,11 +95,12 @@ class STT:
             loop = asyncio.get_event_loop()
 
             def _transcribe():
+                # Disable VAD filter for consistency
                 segments, info = self.model.transcribe(
                     str(audio_path),
                     beam_size=5,
                     language="en",
-                    vad_filter=True,
+                    vad_filter=False,
                 )
                 return " ".join(segment.text.strip() for segment in segments)
 

@@ -12,6 +12,7 @@ from .sonos import SonosSkill
 from .claude import ClaudeSkill
 from .time import TimeSkill
 from .aircraft import AircraftSkill
+from .sports import SportsSkill
 
 __all__ = [
     "TimerSkill",
@@ -26,4 +27,5 @@ __all__ = [
     "ClaudeSkill",
     "TimeSkill",
     "AircraftSkill",
+    "SportsSkill",
 ]
