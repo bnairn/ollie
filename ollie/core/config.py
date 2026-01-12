@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     openrouteservice_api_key: str = ""
     spoonacular_api_key: str = ""
     anthropic_api_key: str = ""
+    deepgram_api_key: str = ""  # For fast cloud STT (optional, falls back to local Whisper)
     opensky_username: str = ""
     opensky_password: str = ""
 

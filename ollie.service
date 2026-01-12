@@ -1,0 +1,30 @@
+[Unit]
+Description=OLLIE Voice Assistant
+After=network.target sound.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=bnairn
+Group=bnairn
+WorkingDirectory=/home/bnairn/ollie
+Environment="PATH=/home/bnairn/ollie/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="VIRTUAL_ENV=/home/bnairn/ollie/.venv"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+ExecStart=/home/bnairn/ollie/.venv/bin/python -m ollie.main
+Restart=always
+RestartSec=5
+WatchdogSec=60
+NotifyAccess=main
+
+# Resource limits
+MemoryMax=1G
+CPUQuota=80%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ollie
+
+[Install]
+WantedBy=multi-user.target
