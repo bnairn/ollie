@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     spoonacular_api_key: str = ""
     anthropic_api_key: str = ""
     deepgram_api_key: str = ""  # For fast cloud STT (optional, falls back to local Whisper)
+    picovoice_access_key: str = ""  # For Porcupine wake word detection
     opensky_username: str = ""
     opensky_password: str = ""
 
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
     use_mock_llm: bool = True
 
     # Voice Settings
-    piper_model_path: Path = Path("./models/en_US-lessac-medium.onnx")
+    piper_model_path: Path = Path("./models/en_US-joe-medium.onnx")
     whisper_model_size: str = "base"
     wake_word: str = "ollie"
     wake_word_threshold: float = 0.5

@@ -13,6 +13,8 @@ from .claude import ClaudeSkill
 from .time import TimeSkill
 from .aircraft import AircraftSkill
 from .sports import SportsSkill
+from .volume import VolumeSkill
+from .metar import MetarSkill
 
 __all__ = [
     "TimerSkill",
@@ -28,4 +30,6 @@ __all__ = [
     "TimeSkill",
     "AircraftSkill",
     "SportsSkill",
+    "VolumeSkill",
+    "MetarSkill",
 ]

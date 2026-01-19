@@ -60,7 +60,7 @@ class AudioCapture:
         if self._input_channels == 2 and self.channels == 1:
             # XVF3800: Channel 1 has beamformed audio, Channel 0 is reference
             # Use only Channel 1 for best speech recognition
-            mono = indata[:, 1].astype(indata.dtype)
+            mono = indata[:, 0].astype(indata.dtype)
             self._audio_queue.put(mono.copy())
         else:
             self._audio_queue.put(indata.copy())

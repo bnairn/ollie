@@ -17,6 +17,7 @@ from .core.config import get_settings
 from .voice.tts import TTS
 from .voice.stt import STT
 from .voice.wakeword_oww import OpenWakeWordDetector
+from .voice.wakeword_porcupine import PorcupineWakeWordDetector
 from .voice.audio import AudioCapture
 from .skills import (
     TimerSkill,
@@ -32,6 +33,8 @@ from .skills import (
     TimeSkill,
     AircraftSkill,
     SportsSkill,
+    VolumeSkill,
+    MetarSkill,
 )
 
 
@@ -65,7 +68,7 @@ class OllieAssistant:
         self.orchestrator = Orchestrator()
         self.tts: Optional[TTS] = None
         self.stt: Optional[STT] = None
-        self.wakeword: Optional[OpenWakeWordDetector] = None
+        self.wakeword: Optional[OpenWakeWordDetector | PorcupineWakeWordDetector] = None
         self.audio: Optional[AudioCapture] = None
         self._running = False
         self._wake_phrase = "Hey Ollie"
@@ -96,6 +99,8 @@ class OllieAssistant:
         self.orchestrator.register(TimeSkill())
         self.orchestrator.register(AircraftSkill())
         self.orchestrator.register(SportsSkill())
+        self.orchestrator.register(VolumeSkill())
+        self.orchestrator.register(MetarSkill())
 
         # Initialize TTS
         if self.settings.tts_enabled:
@@ -115,26 +120,52 @@ class OllieAssistant:
         else:
             self.console.print("[yellow]  STT: Whisper not available[/yellow]")
 
-        # Initialize wake word detector (openWakeWord - much faster than Whisper)
-        # Use custom "Hey Ollie" model if available, otherwise fall back to hey_jarvis
+        # Initialize wake word detector
+        # Prefer Porcupine if API key is available (more reliable)
+        # Fall back to openWakeWord otherwise
         import os
-        custom_model = os.path.expanduser("~/ollie/models/hey_ollie.onnx")
-        use_custom = os.path.exists(custom_model)
-        self.wakeword = OpenWakeWordDetector(
-            wake_word="hey_jarvis",  # Fallback to pre-trained model
-            threshold=0.5 if not use_custom else 0.3,
-            on_wake=self._on_wake,
-            audio_device="hw:3,0",  # XVF3800
-            custom_model_path=custom_model if use_custom else None,
-        )
-        self.console.print("[dim]  Wake word: Loading openWakeWord...[/dim]")
-        await self.wakeword.load()
-        await self.wakeword.start()
-        self._wake_phrase = "Hey Ollie" if use_custom else "Hey Jarvis"
-        if self.wakeword.model:
-            self.console.print(f"[dim]  Wake word: Say '{self._wake_phrase}' to wake[/dim]")
+
+        if self.settings.picovoice_access_key:
+            # Use Porcupine - more reliable wake word detection
+            # Check for custom keyword file, otherwise use built-in "jarvis"
+            custom_keyword = os.path.expanduser("~/ollie/models/hey_ollie.ppn")
+            use_custom = os.path.exists(custom_keyword)
+
+            self.wakeword = PorcupineWakeWordDetector(
+                access_key=self.settings.picovoice_access_key,
+                keyword="jarvis" if not use_custom else None,
+                sensitivity=0.5,
+                on_wake=self._on_wake,
+                audio_device="plughw:2,0",
+                custom_keyword_path=custom_keyword if use_custom else None,
+            )
+            self._wake_phrase = "Hey Ollie" if use_custom else "Jarvis"
+            self.console.print("[dim]  Wake word: Loading Porcupine...[/dim]")
+            await self.wakeword.load()
+            await self.wakeword.start()
+            if self.wakeword.porcupine:
+                self.console.print(f"[dim]  Wake word: Say '{self._wake_phrase}' to wake[/dim]")
+            else:
+                self.console.print("[yellow]  Wake word: Porcupine failed to load[/yellow]")
         else:
-            self.console.print("[yellow]  Wake word: Not available (press Enter to speak)[/yellow]")
+            # Fall back to openWakeWord
+            custom_model = os.path.expanduser("~/ollie/models/hey_ollie.onnx")
+            use_custom = os.path.exists(custom_model)
+            self.wakeword = OpenWakeWordDetector(
+                wake_word="hey_jarvis",
+                threshold=0.5 if not use_custom else 0.3,
+                on_wake=self._on_wake,
+                audio_device="plughw:2,0",
+                custom_model_path=custom_model if use_custom else None,
+            )
+            self._wake_phrase = "Hey Ollie" if use_custom else "Hey Jarvis"
+            self.console.print("[dim]  Wake word: Loading openWakeWord...[/dim]")
+            await self.wakeword.load()
+            await self.wakeword.start()
+            if self.wakeword.model:
+                self.console.print(f"[dim]  Wake word: Say '{self._wake_phrase}' to wake[/dim]")
+            else:
+                self.console.print("[yellow]  Wake word: Not available (press Enter to speak)[/yellow]")
 
         # Audio capture is handled by the wakeword detector's arecord stream
         # No separate AudioCapture needed
@@ -188,7 +219,7 @@ class OllieAssistant:
         audio_chunks = []
         silence_start = None
         speech_detected = False
-        silence_threshold = 0.8  # seconds of silence to stop (after speech detected)
+        silence_threshold = 0.5  # seconds of silence to stop (after speech detected)
         min_speech_chunks = 15  # ~1 second of audio before silence can stop
         max_volume = 0  # Debug: track max volume seen
 
@@ -202,15 +233,18 @@ class OllieAssistant:
                 if chunk is not None:
                     audio_chunks.append(chunk)
 
-                    # Voice activity detection - int16 range is -32768 to 32767
-                    volume = np.abs(chunk).mean()
+                    # Voice activity detection using RMS after removing DC offset
+                    chunk_float = chunk.astype(np.float32)
+                    dc_offset = chunk_float.mean()
+                    ac_signal = chunk_float - dc_offset
+                    volume = np.sqrt(np.mean(ac_signal ** 2))  # RMS of AC component
                     max_volume = max(max_volume, volume)
 
-                    # XVF3800 beamformed output: actual values show speech ~2000-5000, silence ~100-500
-                    if volume > 500:  # Speech detected
+                    # I2S MEMS mic: speech RMS ~300-1500, silence RMS ~30-100
+                    if volume > 50:  # Speech detected
                         speech_detected = True
                         silence_start = None
-                    elif volume < 300:  # Silence
+                    elif volume < 20:  # Silence
                         if silence_start is None:
                             silence_start = time.time()
                         # Stop after we've heard speech and have enough audio
@@ -313,8 +347,14 @@ class OllieAssistant:
                     last_health_check = time.time()
                     self._ping_watchdog()
 
-                # Check for wake word using openWakeWord
-                if self.wakeword and self.wakeword.model:
+                # Check for wake word
+                wakeword_ready = (
+                    self.wakeword and (
+                        getattr(self.wakeword, 'model', None) or
+                        getattr(self.wakeword, 'porcupine', None)
+                    )
+                )
+                if wakeword_ready:
                     # Read audio chunk from arecord
                     chunk = self.wakeword._read_audio_chunk()
                     if chunk is not None and self._running:

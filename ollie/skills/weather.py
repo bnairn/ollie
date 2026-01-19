@@ -173,18 +173,20 @@ class WeatherSkill(Skill):
 
         icon = self.WEATHER_ICONS.get(condition, "🌡️")
 
+        wind_speed_mph = wind_speed * 0.621371  # km/h to mph
+
         response = (
             f"{icon} {resolved_name}: {description}\n"
-            f"Temperature: {temp_c:.0f}°C ({temp_f:.0f}°F)\n"
-            f"Feels like: {feels_like_c:.0f}°C ({feels_like_f:.0f}°F)\n"
+            f"Temperature: {temp_f:.0f}°F ({temp_c:.0f}°C)\n"
+            f"Feels like: {feels_like_f:.0f}°F ({feels_like_c:.0f}°C)\n"
             f"Humidity: {humidity}%\n"
-            f"Wind: {wind_speed:.0f} km/h"
+            f"Wind: {wind_speed_mph:.0f} mph"
         )
 
         # TTS-friendly version
         speak = (
             f"In {resolved_name}, it's {description} with a temperature of "
-            f"{temp_c:.0f} degrees celsius, feels like {feels_like_c:.0f}. "
+            f"{temp_f:.0f} degrees, feels like {feels_like_f:.0f}. "
             f"Humidity is {humidity} percent."
         )
 
