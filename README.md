@@ -21,12 +21,11 @@ source .venv/bin/activate
 # Install OLLIE
 pip install -e .
 
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your API keys
+# Secrets live in 1Password (item "Ollie - env"); .env.op holds only references.
+# 1Password CLI must be signed in.
 
 # Run text-mode prototype
-python -m ollie.cli
+op run --env-file=.env.op -- python -m ollie.cli
 ```
 
 ## Example Queries
